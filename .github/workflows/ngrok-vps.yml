@@ -15,7 +15,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Install Ngrok
+      # Step 2: Install Python (to read config.py)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # Step 3: Install Ngrok
       - name: Install Ngrok
         run: |
           echo "Downloading Ngrok..."
@@ -26,11 +32,14 @@ jobs:
           echo "Verifying Ngrok installation..."
           ngrok --version || { echo "Ngrok installation failed"; exit 1; }
 
-      # Step 3: Debug and Configure Ngrok
-      - name: Configure Ngrok
-        env:
-          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+      # Step 4: Read secrets from config.py and start Ngrok
+      - name: Start Ngrok
         run: |
+          echo "Reading secrets from config.py..."
+          NGROK_AUTH_TOKEN=$(python -c "import config; print(config.NGROK_AUTH_TOKEN)")
+          VPS_USERNAME=$(python -c "import config; print(config.VPS_USERNAME)")
+          VPS_PASSWORD=$(python -c "import config; print(config.VPS_PASSWORD)")
+
           echo "Checking NGROK_AUTH_TOKEN..."
           if [ -z "$NGROK_AUTH_TOKEN" ]; then
             echo "Error: NGROK_AUTH_TOKEN is empty or not set"
@@ -65,10 +74,10 @@ jobs:
           NGROK_PORT=$(echo $NGROK_URL | cut -d':' -f3)
 
           echo "VPS_IP_PORT=$NGROK_IP:$NGROK_PORT" >> $GITHUB_ENV
-          echo "VPS_USERNAME=${{ secrets.VPS_USERNAME }}" >> $GITHUB_ENV
-          echo "VPS_PASSWORD=${{ secrets.VPS_PASSWORD }}" >> $GITHUB_ENV
+          echo "VPS_USERNAME=$VPS_USERNAME" >> $GITHUB_ENV
+          echo "VPS_PASSWORD=$VPS_PASSWORD" >> $GITHUB_ENV
 
-      # Step 4: Display credentials
+      # Step 5: Display credentials
       - name: Output VPS Credentials
         run: |
           echo "Connect to VPS using:"
