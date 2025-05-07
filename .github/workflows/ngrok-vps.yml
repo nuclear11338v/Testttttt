@@ -18,26 +18,36 @@ jobs:
       # Step 2: Install Ngrok
       - name: Install Ngrok
         run: |
+          echo "Downloading Ngrok..."
           wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
           tar -xvf ngrok-v3-stable-linux-amd64.tgz
           chmod +x ngrok
           mv ngrok /usr/local/bin/ngrok
+          echo "Verifying Ngrok installation..."
+          ngrok --version || { echo "Ngrok installation failed"; exit 1; }
 
       # Step 3: Start Ngrok and extract URL
       - name: Start Ngrok
         env:
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          # Configure Ngrok authtoken
-          ngrok authtoken $NGROK_AUTH_TOKEN
+          echo "Configuring Ngrok authtoken..."
+          ngrok authtoken $NGROK_AUTH_TOKEN || { echo "Failed to set authtoken"; exit 1; }
 
-          # Start Ngrok tunnel for SSH (port 22)
+          echo "Starting Ngrok tunnel for SSH (port 22)..."
           ngrok tcp 22 --log=ngrok.log &
 
-          # Wait for Ngrok to initialize
-          sleep 15
+          echo "Waiting for Ngrok to initialize..."
+          sleep 20
 
-          # Extract public URL
+          echo "Checking Ngrok log file..."
+          if [ ! -f ngrok.log ]; then
+            echo "Error: ngrok.log not found"
+            exit 1
+          fi
+          cat ngrok.log
+
+          echo "Extracting Ngrok public URL..."
           NGROK_URL=$(grep -o "tcp://[^ ]*" ngrok.log | head -n 1)
           if [ -z "$NGROK_URL" ]; then
             echo "Error: Could not extract Ngrok URL"
@@ -47,7 +57,6 @@ jobs:
           NGROK_IP=$(echo $NGROK_URL | cut -d'/' -f3 | cut -d':' -f1)
           NGROK_PORT=$(echo $NGROK_URL | cut -d':' -f3)
 
-          # Output credentials
           echo "VPS_IP_PORT=$NGROK_IP:$NGROK_PORT" >> $GITHUB_ENV
           echo "VPS_USERNAME=${{ secrets.VPS_USERNAME }}" >> $GITHUB_ENV
           echo "VPS_PASSWORD=${{ secrets.VPS_PASSWORD }}" >> $GITHUB_ENV
