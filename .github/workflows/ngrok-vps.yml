@@ -4,53 +4,55 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # Manual trigger bhi rakha hai
+  workflow_dispatch:
 
 jobs:
   setup-ngrok:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Repo checkout
+      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: SSH into VPS and setup Ngrok
-      - name: Setup Ngrok on VPS
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
-          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
-          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+      # Step 2: Install Ngrok
+      - name: Install Ngrok
         run: |
-          # Install SSH client
-          sudo apt-get update
-          sudo apt-get install -y sshpass
-
-          # Install Ngrok
           wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
           tar -xvf ngrok-v3-stable-linux-amd64.tgz
+          chmod +x ngrok
+          mv ngrok /usr/local/bin/ngrok
 
-          # Start Ngrok with authtoken
-          ./ngrok authtoken $NGROK_AUTH_TOKEN
+      # Step 3: Start Ngrok and extract URL
+      - name: Start Ngrok
+        env:
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+        run: |
+          # Configure Ngrok authtoken
+          ngrok authtoken $NGROK_AUTH_TOKEN
 
           # Start Ngrok tunnel for SSH (port 22)
-          ./ngrok tcp 22 --log=stdout > ngrok.log &
+          ngrok tcp 22 --log=ngrok.log &
 
           # Wait for Ngrok to initialize
-          sleep 10
+          sleep 15
 
-          # Extract public URL (IP and port)
+          # Extract public URL
           NGROK_URL=$(grep -o "tcp://[^ ]*" ngrok.log | head -n 1)
+          if [ -z "$NGROK_URL" ]; then
+            echo "Error: Could not extract Ngrok URL"
+            exit 1
+          fi
+
           NGROK_IP=$(echo $NGROK_URL | cut -d'/' -f3 | cut -d':' -f1)
           NGROK_PORT=$(echo $NGROK_URL | cut -d':' -f3)
 
           # Output credentials
           echo "VPS_IP_PORT=$NGROK_IP:$NGROK_PORT" >> $GITHUB_ENV
-          echo "VPS_USERNAME=$VPS_USERNAME" >> $GITHUB_ENV
-          echo "VPS_PASSWORD=$VPS_PASSWORD" >> $GITHUB_ENV
+          echo "VPS_USERNAME=${{ secrets.VPS_USERNAME }}" >> $GITHUB_ENV
+          echo "VPS_PASSWORD=${{ secrets.VPS_PASSWORD }}" >> $GITHUB_ENV
 
-      # Step 3: Display credentials
+      # Step 4: Display credentials
       - name: Output VPS Credentials
         run: |
           echo "Connect to VPS using:"
